@@ -3,11 +3,56 @@ pub enum AST {
     Num(usize),
     Add(Box<AST>, Box<AST>),
     Minus(Box<AST>, Box<AST>),
+    Bool(bool),
 }
 
-pub fn eval(ast: AST) -> usize {
+#[derive(Debug, Clone, PartialEq)]
+pub enum Object {
+    Num(usize),
+    Bool(bool),
+}
+
+impl std::ops::Add for Object {
+    type Output = Object;
+    fn add(self, rhs: Self) -> Self::Output {
+        match (&self, &rhs) {
+            (Object::Num(left), Object::Num(right)) => Object::Num(left + right),
+            _ => panic!(
+                "left and right are expected to be Num, but got left: {:?}, right: {:?}",
+                self, rhs
+            ),
+        }
+    }
+}
+
+impl std::ops::Sub for Object {
+    type Output = Object;
+    fn sub(self, rhs: Self) -> Self::Output {
+        match (&self, &rhs) {
+            (Object::Num(left), Object::Num(right)) => Object::Num(left - right),
+            _ => panic!(
+                "left and right are expected to be Num, but got left: {:?}, right: {:?}",
+                self, rhs
+            ),
+        }
+    }
+}
+
+impl From<usize> for AST {
+    fn from(v: usize) -> Self {
+        AST::Num(v)
+    }
+}
+
+impl From<bool> for AST {
+    fn from(v: bool) -> Self {
+        AST::Bool(v)
+    }
+}
+
+pub fn eval(ast: AST) -> Object {
     match ast {
-        AST::Num(v) => v,
+        AST::Num(v) => Object::Num(v),
         AST::Add(left, right) => {
             let left_obj = eval(*left);
             let right_obj = eval(*right);
@@ -18,6 +63,7 @@ pub fn eval(ast: AST) -> usize {
             let right_obj = eval(*right);
             left_obj - right_obj
         }
+        AST::Bool(b) => Object::Bool(b),
     }
 }
 
@@ -34,8 +80,9 @@ macro_rules! ast {
     ((- $left:tt $right:tt)) => {
         $crate::AST::Minus(Box::new(ast!($left)), Box::new(ast!($right)))
     };
-    ($num:expr) => {
-        $crate::AST::Num($num)
+    // 1 や true がマッチする
+    ($exp:expr) => {
+        $crate::AST::from($exp)
     };
 }
 
@@ -45,12 +92,12 @@ mod tests {
     #[test]
     fn test_eval() {
         let ast = AST::Num(1);
-        assert_eq!(eval(ast), 1);
+        assert_eq!(eval(ast), Object::Num(1));
 
         // (1 + 2)
         // (+ 1 2)
         let simple_add = AST::Add(Box::new(AST::Num(1)), Box::new(AST::Num(2)));
-        assert_eq!(eval(simple_add), 3);
+        assert_eq!(eval(simple_add), Object::Num(3));
 
         // ((((1 + 2) + 3) + 4) + 5)
         // (+ (+ (+ (+ 1 2) 3) 4 ) 5)
@@ -65,7 +112,7 @@ mod tests {
             Box::new(AST::Num(5)),
         );
 
-        assert_eq!(eval(complicated_add), 15);
+        assert_eq!(eval(complicated_add), Object::Num(15));
 
         assert_eq!(
             eval(
@@ -73,8 +120,11 @@ mod tests {
                 // (- (+ 1 2) 2)
                 ast!((- (+ 1 2) 2)),
             ),
-            1
-        )
+            Object::Num(1)
+        );
+
+        assert_eq!(eval(ast!(true)), Object::Bool(true));
+        assert_eq!(eval(ast!(false)), Object::Bool(false));
     }
 
     #[test]
@@ -85,7 +135,7 @@ mod tests {
         );
 
         assert_eq!(
-            ast!((+ (+ (+ (+ 1 2) 3) 4 ) 5)),
+            ast!((+ (+ (+ (+ 1 2) 3) 4) 5)),
             AST::Add(
                 Box::new(AST::Add(
                     Box::new(AST::Add(
