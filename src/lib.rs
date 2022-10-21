@@ -15,6 +15,20 @@ pub fn eval(ast: AST) -> usize {
     }
 }
 
+// 関数呼び出しは型や引数が一致していないと呼び出せないが
+// マクロは型も引数の個数も一致してなくても呼び出せる
+#[macro_export]
+macro_rules! ast {
+    ((+ $left:tt $right:tt)) => {
+        // このマクロの中でASTやpubにしてるやつを使いたいときは
+        // `$crate::`っておまじないをつけてください:pray:
+        $crate::AST::Add(Box::new(ast!($left)), Box::new(ast!($right)))
+    };
+    ($num:expr) => {
+        $crate::AST::Num($num)
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -23,11 +37,13 @@ mod tests {
         let ast = AST::Num(1);
         assert_eq!(eval(ast), 1);
 
-        // (1+2)
+        // (1 + 2)
+        // (+ 1 2)
         let simple_add = AST::Add(Box::new(AST::Num(1)), Box::new(AST::Num(2)));
         assert_eq!(eval(simple_add), 3);
 
-        // ((((1+2)+3)+4)+5)
+        // ((((1 + 2) + 3) + 4) + 5)
+        // (+ (+ (+ (+ 1 2) 3) 4 ) 5)
         let complicated_add = AST::Add(
             Box::new(AST::Add(
                 Box::new(AST::Add(
@@ -40,5 +56,27 @@ mod tests {
         );
 
         assert_eq!(eval(complicated_add), 15);
+    }
+
+    #[test]
+    fn test_ast_macro() {
+        assert_eq!(
+            ast!((+ 1 2)),
+            AST::Add(Box::new(AST::Num(1)), Box::new(AST::Num(2)))
+        );
+
+        assert_eq!(
+            ast!((+ (+ (+ (+ 1 2) 3) 4 ) 5)),
+            AST::Add(
+                Box::new(AST::Add(
+                    Box::new(AST::Add(
+                        Box::new(AST::Add(Box::new(AST::Num(1)), Box::new(AST::Num(2)))),
+                        Box::new(AST::Num(3)),
+                    )),
+                    Box::new(AST::Num(4)),
+                )),
+                Box::new(AST::Num(5)),
+            )
+        );
     }
 }
