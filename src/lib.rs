@@ -17,12 +17,17 @@ pub enum AST {
         value: Box<AST>,
     },
     Ident(String),
+    Function {
+        arg: String,
+        body: Box<AST>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Object {
     Num(usize),
     Bool(bool),
+    Function { arg: String, body: Box<AST> },
 }
 
 impl std::ops::Add for Object {
@@ -97,6 +102,7 @@ pub fn eval(ast: AST, env: &mut HashMap<String, Object>) -> Object {
                 panic!("given ident {} is not defined", id)
             }
         }
+        AST::Function { arg, body } => Object::Function { arg, body },
     }
 }
 
@@ -127,6 +133,12 @@ macro_rules! ast {
         $crate::AST::Define {
             name: std::stringify!($name).to_string(),
             value: Box::new(ast!($value)),
+        }
+    };
+    ((Func $arg:ident $body:tt)) => {
+        $crate::AST::Function {
+            arg: std::stringify!($arg).to_string(),
+            body: Box::new(ast!($body)),
         }
     };
     // $name:ident にマッチしてしまうので先に書いておく
@@ -269,6 +281,31 @@ mod tests {
         assert_eq!(
             ast!((+ 1 x)),
             AST::Add(Box::new(AST::Num(1)), Box::new(AST::Ident("x".to_string())))
+        );
+
+        assert_eq!(
+            ast!((Func x (+ x 2))),
+            AST::Function {
+                arg: "x".to_string(),
+                body: Box::new(AST::Add(
+                    Box::new(AST::Ident("x".to_string())),
+                    Box::new(AST::Num(2)),
+                ))
+            }
+        );
+
+        assert_eq!(
+            ast!((Define x (Func y (+ y 2)))),
+            AST::Define {
+                name: "x".to_string(),
+                value: Box::new(AST::Function {
+                    arg: "y".to_string(),
+                    body: Box::new(AST::Add(
+                        Box::new(AST::Ident("y".to_string())),
+                        Box::new(AST::Num(2)),
+                    ))
+                })
+            }
         );
     }
 }
