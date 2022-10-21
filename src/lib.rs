@@ -10,6 +10,10 @@ pub enum AST {
         els: Box<AST>,
     },
     Equal(Box<AST>, Box<AST>),
+    Define {
+        name: String,
+        value: Box<AST>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -78,6 +82,7 @@ pub fn eval(ast: AST) -> Object {
             _ => unimplemented!(),
         },
         AST::Equal(left, right) => Object::Bool(eval(*left) == eval(*right)),
+        AST::Define { name, value } => unimplemented!(),
     }
 }
 
@@ -102,6 +107,12 @@ macro_rules! ast {
             cond: Box::new(ast!($cond)),
             then: Box::new(ast!($then)),
             els: Box::new(ast!($els)),
+        }
+    };
+    ((Define $name:ident $value:tt)) => {
+        $crate::AST::Define {
+            name: std::stringify!($name).to_string(),
+            value: Box::new(ast!($value)),
         }
     };
     // 1 や true がマッチする
@@ -200,6 +211,14 @@ mod tests {
         assert_eq!(
             ast!((== 1 2)),
             AST::Equal(Box::new(AST::Num(1)), Box::new(AST::Num(2)))
+        );
+
+        assert_eq!(
+            ast!((Define x 1)),
+            AST::Define {
+                name: "x".to_string(),
+                value: Box::new(AST::Num(1))
+            }
         );
     }
 }
