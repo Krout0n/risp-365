@@ -4,6 +4,11 @@ pub enum AST {
     Add(Box<AST>, Box<AST>),
     Minus(Box<AST>, Box<AST>),
     Bool(bool),
+    If {
+        cond: Box<AST>,
+        then: Box<AST>,
+        els: Box<AST>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -64,6 +69,11 @@ pub fn eval(ast: AST) -> Object {
             left_obj - right_obj
         }
         AST::Bool(b) => Object::Bool(b),
+        AST::If { cond, then, els } => match eval(*cond) {
+            Object::Bool(true) => eval(*then),
+            Object::Bool(false) => eval(*els),
+            _ => unimplemented!(),
+        },
     }
 }
 
@@ -79,6 +89,13 @@ macro_rules! ast {
     };
     ((- $left:tt $right:tt)) => {
         $crate::AST::Minus(Box::new(ast!($left)), Box::new(ast!($right)))
+    };
+    ((If $cond:tt $then:tt $els:tt)) => {
+        $crate::AST::If {
+            cond: Box::new(ast!($cond)),
+            then: Box::new(ast!($then)),
+            els: Box::new(ast!($els)),
+        }
     };
     // 1 や true がマッチする
     ($exp:expr) => {
@@ -125,6 +142,9 @@ mod tests {
 
         assert_eq!(eval(ast!(true)), Object::Bool(true));
         assert_eq!(eval(ast!(false)), Object::Bool(false));
+
+        assert_eq!(eval(ast!((If true 1 2))), Object::Num(1));
+        assert_eq!(eval(ast!((If false 1 2))), Object::Num(2));
     }
 
     #[test]
