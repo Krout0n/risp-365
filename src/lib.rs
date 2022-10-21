@@ -9,6 +9,7 @@ pub enum AST {
         then: Box<AST>,
         els: Box<AST>,
     },
+    Equal(Box<AST>, Box<AST>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -76,6 +77,7 @@ pub fn eval(ast: AST) -> Object {
             Object::Num(_) => eval(*els),
             _ => unimplemented!(),
         },
+        AST::Equal(left, right) => Object::Bool(eval(*left) == eval(*right)),
     }
 }
 
@@ -91,6 +93,9 @@ macro_rules! ast {
     };
     ((- $left:tt $right:tt)) => {
         $crate::AST::Minus(Box::new(ast!($left)), Box::new(ast!($right)))
+    };
+    ((== $left:tt $right:tt)) => {
+        $crate::AST::Equal(Box::new(ast!($left)), Box::new(ast!($right)))
     };
     ((If $cond:tt $then:tt $els:tt)) => {
         $crate::AST::If {
@@ -150,6 +155,9 @@ mod tests {
 
         assert_eq!(eval(ast!((If 1 1 2))), Object::Num(1));
         assert_eq!(eval(ast!((If 0 1 2))), Object::Num(2));
+
+        assert_eq!(eval(ast!((== 3 (+ 1 2)))), Object::Bool(true));
+        assert_eq!(eval(ast!((== 0 (+ 1 2)))), Object::Bool(false));
     }
 
     #[test]
@@ -187,6 +195,11 @@ mod tests {
                 then: Box::new(AST::Num(2)),
                 els: Box::new(AST::Num(3))
             }
+        );
+
+        assert_eq!(
+            ast!((== 1 2)),
+            AST::Equal(Box::new(AST::Num(1)), Box::new(AST::Num(2)))
         );
     }
 }
