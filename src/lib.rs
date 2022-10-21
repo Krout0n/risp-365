@@ -72,6 +72,8 @@ pub fn eval(ast: AST) -> Object {
         AST::If { cond, then, els } => match eval(*cond) {
             Object::Bool(true) => eval(*then),
             Object::Bool(false) => eval(*els),
+            Object::Num(v) if v != 0 => eval(*then),
+            Object::Num(_) => eval(*els),
             _ => unimplemented!(),
         },
     }
@@ -145,6 +147,9 @@ mod tests {
 
         assert_eq!(eval(ast!((If true 1 2))), Object::Num(1));
         assert_eq!(eval(ast!((If false 1 2))), Object::Num(2));
+
+        assert_eq!(eval(ast!((If 1 1 2))), Object::Num(1));
+        assert_eq!(eval(ast!((If 0 1 2))), Object::Num(2));
     }
 
     #[test]
@@ -171,6 +176,17 @@ mod tests {
         assert_eq!(
             ast!((- 10 5)),
             AST::Minus(Box::new(AST::Num(10)), Box::new(AST::Num(5)))
-        )
+        );
+
+        assert_eq!(ast!(true), AST::Bool(true));
+        assert_eq!(ast!(false), AST::Bool(false));
+        assert_eq!(
+            ast!((If 1 2 3)),
+            AST::If {
+                cond: Box::new(AST::Num(1)),
+                then: Box::new(AST::Num(2)),
+                els: Box::new(AST::Num(3))
+            }
+        );
     }
 }
