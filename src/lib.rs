@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum AST {
     Num(usize),
@@ -60,29 +62,33 @@ impl From<bool> for AST {
     }
 }
 
-pub fn eval(ast: AST) -> Object {
+pub fn eval(ast: AST, env: &mut HashMap<String, Object>) -> Object {
     match ast {
         AST::Num(v) => Object::Num(v),
         AST::Add(left, right) => {
-            let left_obj = eval(*left);
-            let right_obj = eval(*right);
+            let left_obj = eval(*left, env);
+            let right_obj = eval(*right, env);
             left_obj + right_obj
         }
         AST::Minus(left, right) => {
-            let left_obj = eval(*left);
-            let right_obj = eval(*right);
+            let left_obj = eval(*left, env);
+            let right_obj = eval(*right, env);
             left_obj - right_obj
         }
         AST::Bool(b) => Object::Bool(b),
-        AST::If { cond, then, els } => match eval(*cond) {
-            Object::Bool(true) => eval(*then),
-            Object::Bool(false) => eval(*els),
-            Object::Num(v) if v != 0 => eval(*then),
-            Object::Num(_) => eval(*els),
+        AST::If { cond, then, els } => match eval(*cond, env) {
+            Object::Bool(true) => eval(*then, env),
+            Object::Bool(false) => eval(*els, env),
+            Object::Num(v) if v != 0 => eval(*then, env),
+            Object::Num(_) => eval(*els, env),
             _ => unimplemented!(),
         },
-        AST::Equal(left, right) => Object::Bool(eval(*left) == eval(*right)),
-        AST::Define { name, value } => unimplemented!(),
+        AST::Equal(left, right) => Object::Bool(eval(*left, env) == eval(*right, env)),
+        AST::Define { name, value } => {
+            let value = eval(*value, env);
+            env.insert(name, value.clone());
+            value
+        }
     }
 }
 
@@ -126,13 +132,14 @@ mod tests {
     use super::*;
     #[test]
     fn test_eval() {
+        let mut empty_env = HashMap::new();
         let ast = AST::Num(1);
-        assert_eq!(eval(ast), Object::Num(1));
+        assert_eq!(eval(ast, &mut empty_env), Object::Num(1));
 
         // (1 + 2)
         // (+ 1 2)
         let simple_add = AST::Add(Box::new(AST::Num(1)), Box::new(AST::Num(2)));
-        assert_eq!(eval(simple_add), Object::Num(3));
+        assert_eq!(eval(simple_add, &mut empty_env), Object::Num(3));
 
         // ((((1 + 2) + 3) + 4) + 5)
         // (+ (+ (+ (+ 1 2) 3) 4 ) 5)
@@ -147,28 +154,44 @@ mod tests {
             Box::new(AST::Num(5)),
         );
 
-        assert_eq!(eval(complicated_add), Object::Num(15));
+        assert_eq!(eval(complicated_add, &mut empty_env), Object::Num(15));
 
         assert_eq!(
             eval(
                 // ((1 + 2) - 2)
                 // (- (+ 1 2) 2)
                 ast!((- (+ 1 2) 2)),
+                &mut empty_env
             ),
             Object::Num(1)
         );
 
-        assert_eq!(eval(ast!(true)), Object::Bool(true));
-        assert_eq!(eval(ast!(false)), Object::Bool(false));
+        assert_eq!(eval(ast!(true), &mut empty_env), Object::Bool(true));
+        assert_eq!(eval(ast!(false), &mut empty_env), Object::Bool(false));
 
-        assert_eq!(eval(ast!((If true 1 2))), Object::Num(1));
-        assert_eq!(eval(ast!((If false 1 2))), Object::Num(2));
+        assert_eq!(eval(ast!((If true 1 2)), &mut empty_env), Object::Num(1));
+        assert_eq!(eval(ast!((If false 1 2)), &mut empty_env), Object::Num(2));
 
-        assert_eq!(eval(ast!((If 1 1 2))), Object::Num(1));
-        assert_eq!(eval(ast!((If 0 1 2))), Object::Num(2));
+        assert_eq!(eval(ast!((If 1 1 2)), &mut empty_env), Object::Num(1));
+        assert_eq!(eval(ast!((If 0 1 2)), &mut empty_env), Object::Num(2));
 
-        assert_eq!(eval(ast!((== 3 (+ 1 2)))), Object::Bool(true));
-        assert_eq!(eval(ast!((== 0 (+ 1 2)))), Object::Bool(false));
+        assert_eq!(
+            eval(ast!((== 3 (+ 1 2))), &mut empty_env),
+            Object::Bool(true)
+        );
+        assert_eq!(
+            eval(ast!((== 0 (+ 1 2))), &mut empty_env),
+            Object::Bool(false)
+        );
+    }
+
+    #[test]
+    fn test_eval_with_env() {
+        let mut env = HashMap::new();
+        let value = eval(ast!((Define x 1)), &mut env);
+
+        assert_eq!(value, Object::Num(1));
+        assert_eq!(env.get("x"), Some(&Object::Num(1)));
     }
 
     #[test]
