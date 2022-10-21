@@ -16,6 +16,7 @@ pub enum AST {
         name: String,
         value: Box<AST>,
     },
+    Ident(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -89,6 +90,13 @@ pub fn eval(ast: AST, env: &mut HashMap<String, Object>) -> Object {
             env.insert(name, value.clone());
             value
         }
+        AST::Ident(id) => {
+            if let Some(obj) = env.get(&id) {
+                obj.clone()
+            } else {
+                panic!("given ident {} is not defined", id)
+            }
+        }
     }
 }
 
@@ -120,6 +128,16 @@ macro_rules! ast {
             name: std::stringify!($name).to_string(),
             value: Box::new(ast!($value)),
         }
+    };
+    // $name:ident にマッチしてしまうので先に書いておく
+    (true) => {
+        $crate::AST::Bool(true)
+    };
+    (false) => {
+        $crate::AST::Bool(false)
+    };
+    ($name:ident) => {
+        $crate::AST::Ident(std::stringify!($name).to_string())
     };
     // 1 や true がマッチする
     ($exp:expr) => {
@@ -192,6 +210,9 @@ mod tests {
 
         assert_eq!(value, Object::Num(1));
         assert_eq!(env.get("x"), Some(&Object::Num(1)));
+
+        assert_eq!(eval(ast!(x), &mut env), Object::Num(1));
+        assert_eq!(eval(ast!((+ 3 x)), &mut env), Object::Num(4));
     }
 
     #[test]
@@ -242,6 +263,12 @@ mod tests {
                 name: "x".to_string(),
                 value: Box::new(AST::Num(1))
             }
+        );
+
+        assert_eq!(ast!(x), AST::Ident("x".to_string()));
+        assert_eq!(
+            ast!((+ 1 x)),
+            AST::Add(Box::new(AST::Num(1)), Box::new(AST::Ident("x".to_string())))
         );
     }
 }
