@@ -1,3 +1,5 @@
+mod impls;
+
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -18,7 +20,7 @@ pub enum AST {
     },
     Ident(String),
     Function {
-        arg: String,
+        params: Vec<String>,
         body: Box<AST>,
     },
 }
@@ -27,45 +29,7 @@ pub enum AST {
 pub enum Object {
     Num(usize),
     Bool(bool),
-    Function { arg: String, body: Box<AST> },
-}
-
-impl std::ops::Add for Object {
-    type Output = Object;
-    fn add(self, rhs: Self) -> Self::Output {
-        match (&self, &rhs) {
-            (Object::Num(left), Object::Num(right)) => Object::Num(left + right),
-            _ => panic!(
-                "left and right are expected to be Num, but got left: {:?}, right: {:?}",
-                self, rhs
-            ),
-        }
-    }
-}
-
-impl std::ops::Sub for Object {
-    type Output = Object;
-    fn sub(self, rhs: Self) -> Self::Output {
-        match (&self, &rhs) {
-            (Object::Num(left), Object::Num(right)) => Object::Num(left - right),
-            _ => panic!(
-                "left and right are expected to be Num, but got left: {:?}, right: {:?}",
-                self, rhs
-            ),
-        }
-    }
-}
-
-impl From<usize> for AST {
-    fn from(v: usize) -> Self {
-        AST::Num(v)
-    }
-}
-
-impl From<bool> for AST {
-    fn from(v: bool) -> Self {
-        AST::Bool(v)
-    }
+    Function { params: Vec<String>, body: Box<AST> },
 }
 
 pub fn eval(ast: AST, env: &mut HashMap<String, Object>) -> Object {
@@ -102,7 +66,7 @@ pub fn eval(ast: AST, env: &mut HashMap<String, Object>) -> Object {
                 panic!("given ident {} is not defined", id)
             }
         }
-        AST::Function { arg, body } => Object::Function { arg, body },
+        AST::Function { params, body } => Object::Function { params, body },
     }
 }
 
@@ -135,9 +99,9 @@ macro_rules! ast {
             value: Box::new(ast!($value)),
         }
     };
-    ((Func $arg:ident $body:tt)) => {
+    ((Func ($( $param:ident )*) $body:tt)) => {
         $crate::AST::Function {
-            arg: std::stringify!($arg).to_string(),
+            params: vec![$( stringify!($param).to_string() ), *],
             body: Box::new(ast!($body)),
         }
     };
@@ -284,9 +248,17 @@ mod tests {
         );
 
         assert_eq!(
-            ast!((Func x (+ x 2))),
+            ast!((Func () 2)),
             AST::Function {
-                arg: "x".to_string(),
+                params: vec![],
+                body: Box::new(AST::Num(2)),
+            }
+        );
+
+        assert_eq!(
+            ast!((Func (x) (+ x 2))),
+            AST::Function {
+                params: vec!["x".to_string()],
                 body: Box::new(AST::Add(
                     Box::new(AST::Ident("x".to_string())),
                     Box::new(AST::Num(2)),
@@ -295,11 +267,11 @@ mod tests {
         );
 
         assert_eq!(
-            ast!((Define x (Func y (+ y 2)))),
+            ast!((Define x (Func (x y) (+ y 2)))),
             AST::Define {
                 name: "x".to_string(),
                 value: Box::new(AST::Function {
-                    arg: "y".to_string(),
+                    params: vec!["x".to_string(), "y".to_string()],
                     body: Box::new(AST::Add(
                         Box::new(AST::Ident("y".to_string())),
                         Box::new(AST::Num(2)),
