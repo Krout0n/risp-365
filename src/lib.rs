@@ -1,6 +1,6 @@
-mod impls;
-
 use std::collections::HashMap;
+
+mod impls;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AST {
@@ -23,6 +23,10 @@ pub enum AST {
         params: Vec<String>,
         body: Box<AST>,
     },
+    Apply {
+        fn_lit: Box<AST>,
+        args: Vec<AST>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -33,7 +37,7 @@ pub enum Object {
 }
 
 pub fn eval(ast: AST, env: &mut HashMap<String, Object>) -> Object {
-    match ast {
+    let obj = match ast {
         AST::Num(v) => Object::Num(v),
         AST::Add(left, right) => {
             let left_obj = eval(*left, env);
@@ -67,7 +71,22 @@ pub fn eval(ast: AST, env: &mut HashMap<String, Object>) -> Object {
             }
         }
         AST::Function { params, body } => Object::Function { params, body },
-    }
+        AST::Apply { fn_lit, args } => {
+            let args_val = args.into_iter().map(|arg| eval(arg, &mut env.clone()));
+            let fn_lit_obj = eval(*fn_lit, &mut env.clone());
+            match fn_lit_obj {
+                Object::Function { params, body } => {
+                    let mut deep_env: HashMap<String, Object> =
+                        params.into_iter().zip(args_val).collect();
+                    deep_env.extend(env.clone().into_iter());
+                    eval(*body, &mut deep_env)
+                }
+                _ => unimplemented!(),
+            }
+        }
+    };
+    // dbg!(obj)
+    obj
 }
 
 // 関数呼び出しは型や引数が一致していないと呼び出せないが
@@ -103,6 +122,12 @@ macro_rules! ast {
         $crate::AST::Function {
             params: vec![$( stringify!($param).to_string() ), *],
             body: Box::new(ast!($body)),
+        }
+    };
+    ((Apply $fn_lit:tt $( $arg:tt )*)) => {
+        $crate::AST::Apply {
+            fn_lit: Box::new(ast!($fn_lit)),
+            args: vec![$( ast!($arg) ), *],
         }
     };
     // $name:ident にマッチしてしまうので先に書いておく
@@ -189,6 +214,28 @@ mod tests {
 
         assert_eq!(eval(ast!(x), &mut env), Object::Num(1));
         assert_eq!(eval(ast!((+ 3 x)), &mut env), Object::Num(4));
+
+        let mut env = HashMap::new();
+        let plus_two = ast!((Define plus_two (Func (x) (+ x 2))));
+        eval(plus_two, &mut env);
+
+        let app = ast!((Apply plus_two 3));
+        let obj = eval(app, &mut env);
+        assert_eq!(obj, Object::Num(5));
+
+        let f = ast!((Define f (Func (a b) (+ a (+ b 1)))));
+        eval(f, &mut env);
+        let f_app = ast!((Apply f 10 20));
+        assert_eq!(eval(f_app, &mut env), Object::Num(31));
+
+        let f_app = ast!((Apply (Func (a b) (+ a (+ b 1))) 100 200));
+        assert_eq!(eval(f_app, &mut env), Object::Num(301));
+
+        let g = ast!((Define g (Func (y) (If (== y 0) 1000 (Apply f 10 y)))));
+        eval(g, &mut env);
+
+        let g_app = ast!((Apply g 500));
+        assert_eq!(eval(g_app, &mut env), Object::Num(511));
     }
 
     #[test]
